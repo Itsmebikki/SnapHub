@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
@@ -10,7 +12,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json({ limit: "10mb" }));
 
-// ===== Env Vars (set in Azure Web App -> Configuration) =====
+// Env Vars (set in Azure Web App -> Configuration)
 const PORT = process.env.PORT || 3000;
 
 const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -21,7 +23,7 @@ const COSMOS_KEY = process.env.COSMOS_KEY;
 const COSMOS_DB = process.env.COSMOS_DB || "snaphub";
 const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || "Photos";
 
-// CORS: allow your static website
+// CORS: For allowing static website
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*")
   .split(",")
   .map(s => s.trim())
