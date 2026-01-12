@@ -10,21 +10,18 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json({ limit: "10mb" }));
 
-/**
- * ===== REQUIRED ENV VARS in Azure Web App Configuration =====
- * AZURE_STORAGE_CONNECTION_STRING = (from Storage account access keys)
- * BLOB_CONTAINER = photos
- *
- * COSMOS_ENDPOINT = (from Cosmos DB Keys)
- * COSMOS_KEY = (from Cosmos DB Keys)
- * COSMOS_DB = snaphub
- * COSMOS_CONTAINER = photos
- *
- * CORS_ORIGINS = https://photostorages.z36.web.core.windows.net
- */
-
+// ===== Env Vars (set in Azure Web App -> Configuration) =====
 const PORT = process.env.PORT || 3000;
 
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+const BLOB_CONTAINER = process.env.BLOB_CONTAINER || "photos";
+
+const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT;
+const COSMOS_KEY = process.env.COSMOS_KEY;
+const COSMOS_DB = process.env.COSMOS_DB || "snaphub";
+const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || "Photos";
+
+// CORS: allow your static website
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || "*")
   .split(",")
   .map(s => s.trim())
@@ -41,14 +38,6 @@ app.use(
   })
 );
 
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-const BLOB_CONTAINER = process.env.BLOB_CONTAINER || "photos";
-
-const COSMOS_ENDPOINT = process.env.COSMOS_ENDPOINT;
-const COSMOS_KEY = process.env.COSMOS_KEY;
-const COSMOS_DB = process.env.COSMOS_DB || "snaphub";
-const COSMOS_CONTAINER = process.env.COSMOS_CONTAINER || "photos";
-
 function must(name, value) {
   if (!value) throw new Error(`Missing env var: ${name}`);
 }
@@ -58,8 +47,11 @@ let cosmosContainer;
 
 async function init() {
   must("AZURE_STORAGE_CONNECTION_STRING", AZURE_STORAGE_CONNECTION_STRING);
-  const blobService = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
-  blobContainerClient = blobService.getContainerClient(BLOB_CONTAINER);
+
+  const blobServiceClient = BlobServiceClient.fromConnectionString(
+    AZURE_STORAGE_CONNECTION_STRING
+  );
+  blobContainerClient = blobServiceClient.getContainerClient(BLOB_CONTAINER);
   await blobContainerClient.createIfNotExists();
 
   must("COSMOS_ENDPOINT", COSMOS_ENDPOINT);
@@ -74,8 +66,13 @@ async function init() {
   });
 
   cosmosContainer = container;
-  console.log("✅ Connected: Blob + Cosmos");
+  console.log("✅ Connected to Azure Blob Storage + Cosmos DB");
 }
+
+// Home (avoid 403 confusion)
+app.get("/", (req, res) => {
+  res.send("SnapHub API is running. Try /health or /api/photos");
+});
 
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "SnapHub API" });
@@ -88,48 +85,46 @@ app.get("/health", (req, res) => {
  * - title
  * - caption
  * - location
- * - people (comma separated)
  */
 app.post("/api/photos", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Missing file" });
 
-    const { title, caption, location, people } = req.body;
+    const { title, caption, location } = req.body; 
 
     const id = uuidv4();
     const ext = (req.file.originalname || "").split(".").pop() || "jpg";
     const blobName = `${id}.${ext}`;
 
-    const blockBlob = blobContainerClient.getBlockBlobClient(blobName);
-    await blockBlob.uploadData(req.file.buffer, {
+    const blockBlobClient = blobContainerClient.getBlockBlobClient(blobName);
+    await blockBlobClient.uploadData(req.file.buffer, {
       blobHTTPHeaders: { blobContentType: req.file.mimetype || "image/jpeg" }
     });
 
-    const doc = {
+    const photoDoc = {
       id,
       blobName,
-      imageUrl: blockBlob.url,
+      imageUrl: blockBlobClient.url,
       title: title || "",
       caption: caption || "",
       location: location || "",
-      people: people ? people.split(",").map(p => p.trim()).filter(Boolean) : [],
       createdAt: new Date().toISOString(),
       comments: [],
       avgRating: 0,
       ratingCount: 0
     };
 
-    await cosmosContainer.items.create(doc);
-
-    res.status(201).json(doc);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Upload failed", details: e.message });
+    await cosmosContainer.items.create(photoDoc);
+    res.status(201).json(photoDoc);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Upload failed", details: err.message });
   }
 });
 
 /**
  * GET /api/photos?q=search
+ * Search only title/caption/location 
  */
 app.get("/api/photos", async (req, res) => {
   try {
@@ -142,34 +137,26 @@ app.get("/api/photos", async (req, res) => {
     const filtered = !q
       ? resources
       : resources.filter(p => {
-          const hay = [
-            p.title,
-            p.caption,
-            p.location,
-            ...(p.people || [])
-          ].join(" ").toLowerCase();
+          const hay = [p.title, p.caption, p.location].join(" ").toLowerCase();
           return hay.includes(q);
         });
 
     res.json(filtered);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Fetch failed", details: e.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Fetch failed", details: err.message });
   }
 });
 
-/**
- * GET /api/photos/:id
- */
 app.get("/api/photos/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const { resource } = await cosmosContainer.item(id, id).read();
     if (!resource) return res.status(404).json({ error: "Not found" });
     res.json(resource);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Fetch failed", details: e.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Fetch failed", details: err.message });
   }
 });
 
@@ -212,15 +199,15 @@ app.post("/api/photos/:id/comments", async (req, res) => {
 
     await cosmosContainer.item(id, id).replace(resource);
     res.status(201).json(resource);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Comment failed", details: e.message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Comment failed", details: err.message });
   }
 });
 
 init()
   .then(() => {
-    app.listen(PORT, () => console.log("✅ API running on port", PORT));
+    app.listen(PORT, () => console.log(`✅ API running on port ${PORT}`));
   })
   .catch(err => {
     console.error("❌ Startup failed:", err.message);
