@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SnapHub — Creator Upload</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; background:#f6f7fb; }
+    header { padding: 16px; background:#111827; color:#fff; display:flex; gap:12px; align-items:center; }
+    header a { color:#fff; text-decoration:none; font-weight:700; }
+    .wrap { padding: 16px; max-width: 900px; margin: 0 auto; }
+    .card { background:#fff; border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,.06); padding: 16px; }
+    label { display:block; margin-top: 10px; font-weight:700; }
+    input, textarea, button { width:100%; padding: 10px; border-radius: 10px; border:1px solid #d1d5db; margin-top: 6px; }
+    button { border:none; background:#111827; color:#fff; cursor:pointer; margin-top: 12px; }
+    .muted { color:#6b7280; font-size: 13px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 720px){ .row { grid-template-columns: 1fr; } }
+    img { max-width: 100%; border-radius: 14px; margin-top: 10px; }
+    .ok { color:#16a34a; font-weight:700; }
+    .err { color:#dc2626; font-weight:700; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="font-size:18px;font-weight:800;">SnapHub</div>
+    <a href="./index.html">Back to Browse</a>
+    <div style="margin-left:auto;" class="muted">Creator view</div>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin:0 0 6px 0;">Upload Photo</h2>
+      <div class="muted">Upload an image with metadata. Consumers can browse, comment, and rate.</div>
+
+      <label>Choose Image</label>
+      <input id="file" type="file" accept="image/*" />
+
+      <img id="preview" alt="" style="display:none;" />
+
+      <div class="row">
+        <div>
+          <label>Title</label>
+          <input id="title" placeholder="e.g., Sunset in London" />
+        </div>
+        <div>
+          <label>Location</label>
+          <input id="location" placeholder="e.g., Stratford, London" />
+        </div>
+      </div>
+
+      <label>Caption</label>
+      <textarea id="caption" placeholder="Write caption..." rows="3"></textarea>
+
+      <button id="btnUpload">Upload</button>
+      <div id="msg" class="muted" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "https://snapnode-exhkejb5hehvbta6.polandcentral-01.azurewebsites.net";
+
+    const fileEl = document.getElementById("file");
+    const preview = document.getElementById("preview");
+    const msg = document.getElementById("msg");
+
+    fileEl.addEventListener("change", () => {
+      const f = fileEl.files[0];
+      if (!f) return;
+      preview.style.display = "block";
+      preview.src = URL.createObjectURL(f);
+    });
+
+    document.getElementById("btnUpload").onclick = async () => {
+      const f = fileEl.files[0];
+      if (!f) {
+        msg.innerHTML = `<span class="err">Please select an image.</span>`;
+        return;
+      }
+
+      msg.textContent = "Uploading...";
+
+      const form = new FormData();
+      form.append("file", f);
+      form.append("title", document.getElementById("title").value.trim());
+      form.append("caption", document.getElementById("caption").value.trim());
+      form.append("location", document.getElementById("location").value.trim());
+
+      const res = await fetch(API_BASE + "/api/photos", { method: "POST", body: form });
+
+      if (!res.ok) {
+        const t = await res.text();
+        msg.innerHTML = `<span class="err">Upload failed.</span><br/><span class="muted">${t}</span>`;
+        return;
+      }
+
+      const data = await res.json();
+      msg.innerHTML = `<span class="ok">Uploaded ✅</span><br/><span class="muted">Photo ID: ${data.id}</span>`;
+
+      document.getElementById("title").value = "";
+      document.getElementById("caption").value = "";
+      document.getElementById("location").value = "";
+      fileEl.value = "";
+      preview.style.display = "none";
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SnapHub — Browse</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background:#f6f7fb; }
+    header { padding: 16px; background:#111827; color:#fff; display:flex; gap:12px; align-items:center; }
+    header a { color:#fff; text-decoration:none; font-weight:700; }
+    .wrap { padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    input, button, textarea { padding: 10px; border-radius: 10px; border: 1px solid #d1d5db; }
+    button { cursor: pointer; border: none; background:#111827; color:#fff; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 16px; }
+    .card { background:#fff; border-radius: 16px; overflow:hidden; box-shadow: 0 2px 10px rgba(0,0,0,.06); cursor:pointer; }
+    .thumb { width:100%; height: 180px; object-fit: cover; background:#e5e7eb; }
+    .card .p { padding: 12px; }
+    .muted { color:#6b7280; font-size: 13px; }
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display:none; align-items:center; justify-content:center; padding:16px;
+    }
+    .modal.open { display:flex; }
+    .panel { background:#fff; border-radius: 18px; max-width: 900px; width: 100%; overflow:hidden; }
+    .panel-top { display:grid; grid-template-columns: 1.2fr 1fr; }
+    @media (max-width: 860px) { .panel-top { grid-template-columns: 1fr; } }
+    .big { width:100%; height: 420px; object-fit: cover; background:#e5e7eb; }
+    .side { padding: 14px; }
+    .close { float:right; background:#ef4444; }
+    .comment { border-top: 1px solid #e5e7eb; padding: 10px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="font-size:18px;font-weight:800;">SnapHub</div>
+    <a href="./creator.html">Creator Upload</a>
+    <div style="margin-left:auto;" class="muted">Consumer view</div>
+  </header>
+
+  <div class="wrap">
+    <div class="row">
+      <input id="q" placeholder="Search by title, caption, or location..." style="flex:1; min-width:240px;" />
+      <button id="btnSearch">Search</button>
+      <button id="btnRefresh" style="background:#374151;">Refresh</button>
+    </div>
+
+    <div id="status" class="muted" style="margin-top:10px;"></div>
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="panel">
+      <div style="padding:10px; background:#f9fafb;">
+        <button id="btnClose" class="close">Close</button>
+        <div id="mTitle" style="font-weight:800;"></div>
+        <div id="mMeta" class="muted"></div>
+      </div>
+
+      <div class="panel-top">
+        <img id="mImg" class="big" alt="photo" />
+        <div class="side">
+          <div id="mCaption" style="margin-bottom:8px;"></div>
+          <div class="muted" id="mRating"></div>
+
+          <h3 style="margin-top:16px;">Add Comment</h3>
+          <div class="row">
+            <input id="cName" placeholder="Your name" style="flex:1;" />
+            <input id="cRating" type="number" min="0" max="5" step="1" placeholder="Rating 0-5" style="width:140px;" />
+          </div>
+          <textarea id="cText" placeholder="Write comment..." style="width:100%; margin-top:10px; min-height:90px;"></textarea>
+          <button id="btnComment" style="margin-top:10px;">Post Comment</button>
+
+          <h3 style="margin-top:18px;">Comments</h3>
+          <div id="mComments"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "https://snapnode-exhkejb5hehvbta6.polandcentral-01.azurewebsites.net";
+
+    const grid = document.getElementById("grid");
+    const statusEl = document.getElementById("status");
+    const qEl = document.getElementById("q");
+
+    const modal = document.getElementById("modal");
+    const mTitle = document.getElementById("mTitle");
+    const mMeta = document.getElementById("mMeta");
+    const mImg = document.getElementById("mImg");
+    const mCaption = document.getElementById("mCaption");
+    const mComments = document.getElementById("mComments");
+    const mRating = document.getElementById("mRating");
+
+    const cName = document.getElementById("cName");
+    const cRating = document.getElementById("cRating");
+    const cText = document.getElementById("cText");
+
+    let currentPhoto = null;
+
+    function escapeHtml(s) {
+      return (s || "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[c]));
+    }
+
+    async function loadPhotos(query="") {
+      statusEl.textContent = "Loading photos...";
+      grid.innerHTML = "";
+
+      const url = new URL(API_BASE + "/api/photos");
+      if (query) url.searchParams.set("q", query);
+
+      const res = await fetch(url.toString());
+      if (!res.ok) {
+        statusEl.textContent = "Failed to load photos. Check API + CORS settings.";
+        return;
+      }
+      const items = await res.json();
+      statusEl.textContent = `Loaded ${items.length} photos`;
+
+      for (const p of items) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <img class="thumb" src="${p.imageUrl}" alt="thumb"/>
+          <div class="p">
+            <div style="font-weight:800;">${escapeHtml(p.title || "Untitled")}</div>
+            <div class="muted">${escapeHtml(p.location || "")}</div>
+            <div class="muted">⭐ ${p.avgRating || 0} (${p.ratingCount || 0})</div>
+          </div>
+        `;
+        card.onclick = () => openModal(p.id);
+        grid.appendChild(card);
+      }
+    }
+
+    async function openModal(id) {
+      const res = await fetch(API_BASE + "/api/photos/" + encodeURIComponent(id));
+      if (!res.ok) return alert("Failed to load photo details.");
+      currentPhoto = await res.json();
+
+      mTitle.textContent = currentPhoto.title || "Untitled";
+      mMeta.textContent = `Location: ${currentPhoto.location || "-"} • Created: ${new Date(currentPhoto.createdAt).toLocaleString()}`;
+      mImg.src = currentPhoto.imageUrl;
+      mCaption.textContent = currentPhoto.caption || "";
+      mRating.textContent = `⭐ ${currentPhoto.avgRating || 0} (${currentPhoto.ratingCount || 0})`;
+
+      renderComments(currentPhoto.comments || []);
+      modal.classList.add("open");
+    }
+
+    function renderComments(comments) {
+      mComments.innerHTML = "";
+      if (!comments.length) {
+        mComments.innerHTML = `<div class="muted">No comments yet.</div>`;
+        return;
+      }
+      for (const c of comments) {
+        const div = document.createElement("div");
+        div.className = "comment";
+        div.innerHTML = `
+          <div style="font-weight:700;">${escapeHtml(c.name || "Anonymous")} <span class="muted">• ${new Date(c.createdAt).toLocaleString()}</span></div>
+          <div class="muted">Rating: ${c.rating || 0}</div>
+          <div>${escapeHtml(c.comment)}</div>
+        `;
+        mComments.appendChild(div);
+      }
+    }
+
+    document.getElementById("btnClose").onclick = () => modal.classList.remove("open");
+    document.getElementById("btnSearch").onclick = () => loadPhotos(qEl.value.trim());
+    document.getElementById("btnRefresh").onclick = () => { qEl.value=""; loadPhotos(""); };
+
+    document.getElementById("btnComment").onclick = async () => {
+      if (!currentPhoto) return;
+
+      const payload = {
+        name: cName.value.trim(),
+        rating: Number(cRating.value || 0),
+        comment: cText.value.trim()
+      };
+
+      const res = await fetch(API_BASE + "/api/photos/" + encodeURIComponent(currentPhoto.id) + "/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) return alert("Comment failed. Check API logs.");
+
+      const updated = await res.json();
+      currentPhoto = updated;
+      cText.value = "";
+      renderComments(updated.comments || []);
+      mRating.textContent = `⭐ ${updated.avgRating || 0} (${updated.ratingCount || 0})`;
+    };
+
+    loadPhotos();
+  </script>
+</body>
+</html>
