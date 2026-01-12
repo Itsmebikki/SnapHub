@@ -29,6 +29,33 @@
     .side { padding: 14px; }
     .close { float:right; background:#ef4444; }
     .comment { border-top: 1px solid #e5e7eb; padding: 10px 0; }
+    .photo-card {
+      background: #fff;
+      border-radius: 14px;
+      overflow: hidden;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      cursor: pointer;
+    }
+
+    .photo-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    .photo-card img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+
+    .photo-card:hover img {
+      transform: scale(1.05);
+    }
+
+    .photo-info {
+      padding: 12px;
+    }
   </style>
 </head>
 <body>
@@ -79,7 +106,7 @@
   </div>
 
   <script>
-    const API_BASE = "https://snapnode-exhkejb5hehvbta6.polandcentral-01.azurewebsites.net";
+    const API_BASE = "http://localhost:3000";
 
     const grid = document.getElementById("grid");
     const statusEl = document.getElementById("status");
@@ -120,10 +147,10 @@
 
       for (const p of items) {
         const card = document.createElement("div");
-        card.className = "card";
+        card.className = "photo-card";
         card.innerHTML = `
           <img class="thumb" src="${p.imageUrl}" alt="thumb"/>
-          <div class="p">
+          <div class="photo-info">
             <div style="font-weight:800;">${escapeHtml(p.title || "Untitled")}</div>
             <div class="muted">${escapeHtml(p.location || "")}</div>
             <div class="muted">⭐ ${p.avgRating || 0} (${p.ratingCount || 0})</div>
@@ -142,6 +169,7 @@
       mTitle.textContent = currentPhoto.title || "Untitled";
       mMeta.textContent = `Location: ${currentPhoto.location || "-"} • Created: ${new Date(currentPhoto.createdAt).toLocaleString()}`;
       mImg.src = currentPhoto.imageUrl;
+      mImg.alt = "thumb";
       mCaption.textContent = currentPhoto.caption || "";
       mRating.textContent = `⭐ ${currentPhoto.avgRating || 0} (${currentPhoto.ratingCount || 0})`;
 
